@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drone Vision Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column of ~70ch for prose; figures break out to the full
+   content width (max 1100px). Tokens reuse the project's own design system from
+   docs/3d/model.html so this page and the 3D model read as one set. */
+:root{
+  --ground:#EFECE8; --panel:#FFFFFF; --panel-2:#F6F4F1; --edge:#DAD5CF;
+  --ink:#1B1920; --ink-2:#4C4854; --ink-3:#847E8E;
+  --datum:#D4267A; --datum-soft:#D4267A22;
+  --pwr:#D93A2F; --sig:#2E72D6; --rf:#8B54E6; --mech:#D18316; --vis:#2F8F5B; --struct:#7A7488;
+  --sig-soft:#2E72D622; --mech-soft:#D1831622; --vis-soft:#2F8F5B22; --rf-soft:#8B54E622;
+  --shadow:0 1px 2px #1b192010, 0 8px 24px #1b19200d;
+  --display:"Saira","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#131118; --panel:#1B1922; --panel-2:#221F2B; --edge:#322E3E;
+    --ink:#EDE9F0; --ink-2:#ADA6BC; --ink-3:#736D83;
+    --datum:#FF4F96; --datum-soft:#FF4F9622;
+    --pwr:#F0564A; --sig:#5B9BFF; --rf:#B27CFF; --mech:#F0A63A; --vis:#4CC38A; --struct:#8B84A0;
+    --sig-soft:#5B9BFF22; --mech-soft:#F0A63A22; --vis-soft:#4CC38A22; --rf-soft:#B27CFF22;
+    --shadow:0 1px 2px #00000040, 0 8px 28px #00000050;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#131118; --panel:#1B1922; --panel-2:#221F2B; --edge:#322E3E;
+  --ink:#EDE9F0; --ink-2:#ADA6BC; --ink-3:#736D83;
+  --datum:#FF4F96; --datum-soft:#FF4F9622;
+  --pwr:#F0564A; --sig:#5B9BFF; --rf:#B27CFF; --mech:#F0A63A; --vis:#4CC38A; --struct:#8B84A0;
+  --sig-soft:#5B9BFF22; --mech-soft:#F0A63A22; --vis-soft:#4CC38A22; --rf-soft:#B27CFF22;
+  --shadow:0 1px 2px #00000040, 0 8px 28px #00000050;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--display); font-weight:400; font-size:16px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1100px; margin:0 auto; padding-block:0 64px; padding-inline:clamp(16px,4vw,40px)}
+.prose{max-width:72ch}
+h1,h2,h3{font-family:var(--display); text-wrap:balance; margin:0}
+h1{font-size:clamp(30px,5vw,44px); font-weight:600; letter-spacing:.01em; line-height:1.1}
+h2{font-size:clamp(21px,3vw,26px); font-weight:600; margin-top:64px; padding-top:18px; border-top:1px solid var(--edge)}
+h3{font-size:17px; font-weight:600; margin-top:28px}
+p{margin:12px 0}
+a{color:var(--sig)}
+code,kbd{font-family:var(--mono); font-size:.88em; background:var(--panel-2); border:1px solid var(--edge); border-radius:3px; padding:0 .3em}
+pre{font-family:var(--mono); font-size:13px; line-height:1.5; background:var(--panel); border:1px solid var(--edge); border-radius:4px; padding:12px 14px; overflow-x:auto}
+pre code{background:none; border:0; padding:0; font-size:inherit}
+.eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3)}
+header{padding-block:44px 8px}
+header .sub{color:var(--ink-2); font-size:18px; font-weight:300; max-width:60ch; margin-top:10px}
+.meta{display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:18px; font-family:var(--mono); font-size:12px; color:var(--ink-3)}
+.meta b{color:var(--ink-2); font-weight:500}
+
+.callout{border-left:3px solid var(--datum); background:var(--panel); padding:12px 16px; margin:18px 0; max-width:72ch}
+.callout.note{border-left-color:var(--mech)}
+.callout p{margin:6px 0}
+
+figure.fig{margin:22px 0 8px; background:var(--panel); border:1px solid var(--edge); border-radius:6px; padding:14px 14px 10px; box-shadow:var(--shadow)}
+figure.fig .scroll{overflow-x:auto}
+figure.fig svg{display:block; max-width:100%; height:auto; color:var(--ink); min-width:560px}
+figure.fig figcaption{font-size:13.5px; color:var(--ink-2); margin-top:10px; max-width:80ch}
+figure.fig figcaption b{color:var(--ink); font-weight:600}
+
+/* svg vocabulary */
+svg text{font-family:var(--display); font-size:12px; fill:currentColor}
+svg text.t{font-weight:600; font-size:12.5px}
+svg text.s{font-size:10.5px; fill:var(--ink-2)}
+svg text.m{font-family:var(--mono); font-size:10.5px}
+svg text.eb{font-family:var(--mono); font-size:10px; letter-spacing:.1em; fill:var(--ink-3)}
+svg .box{fill:var(--panel-2); stroke:currentColor; stroke-width:1.2}
+svg .grp{fill:none; stroke:currentColor; stroke-width:1; stroke-dasharray:4 4; opacity:.55}
+svg .ln{fill:none; stroke:currentColor; stroke-width:1.3}
+svg .thin{fill:none; stroke:currentColor; stroke-width:.9; stroke-dasharray:3 3; opacity:.7}
+svg .datum{stroke:var(--datum)} svg text.datum{fill:var(--datum); stroke:none}
+svg .sig{stroke:var(--sig)} svg text.sig{fill:var(--sig); stroke:none}
+svg .vis{stroke:var(--vis)} svg text.vis{fill:var(--vis); stroke:none}
+svg .mech{stroke:var(--mech)} svg text.mech{fill:var(--mech); stroke:none}
+svg .rf{stroke:var(--rf)} svg text.rf{fill:var(--rf); stroke:none}
+svg .fill-sig{fill:var(--sig-soft); stroke:var(--sig)}
+svg .fill-vis{fill:var(--vis-soft); stroke:var(--vis)}
+svg .fill-mech{fill:var(--mech-soft); stroke:var(--mech)}
+svg .fill-datum{fill:var(--datum-soft); stroke:var(--datum)}
+svg .fill-ink{fill:currentColor}
+
+table{border-collapse:collapse; width:100%; font-size:14px; margin:14px 0; background:var(--panel); border:1px solid var(--edge)}
+th,td{text-align:left; vertical-align:top; padding:8px 10px; border-bottom:1px solid var(--edge)}
+th{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); font-weight:500; background:var(--panel-2)}
+td code{white-space:nowrap}
+td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+.tscroll{overflow-x:auto}
+tr:last-child td{border-bottom:0}
+
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin:14px 0}
+.card{background:var(--panel); border:1px solid var(--edge); border-radius:6px; padding:12px 14px; min-width:0}
+.card h3{margin:0 0 6px; font-size:15px}
+.card p{margin:6px 0; font-size:14px; color:var(--ink-2)}
+.card .eyebrow{display:block; margin-bottom:4px}
+.pill{display:inline-block; font-family:var(--mono); font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid}
+.pill.sig{color:var(--sig); border-color:var(--sig); background:var(--sig-soft)}
+.pill.vis{color:var(--vis); border-color:var(--vis); background:var(--vis-soft)}
+.pill.mech{color:var(--mech); border-color:var(--mech); background:var(--mech-soft)}
+ol,ul{padding-left:22px} li{margin:5px 0}
+.small{font-size:13.5px; color:var(--ink-2)}
+@media (prefers-reduced-motion: no-preference){ a{transition:color .15s} }
+:focus-visible{outline:2px solid var(--datum); outline-offset:2px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">TigGev / drone_sysytem · origin/main fd1d3e4 · 30 Sep 2026</span>
+  <h1>Drone Vision Architecture</h1>
+  <p class="sub">How the Raspberry Pi companion finds an ArUco marker in the camera feed, takes the drone over from the pilot, and lands on it. Drawn from the modular <code>src/</code> tree that replaced the single <code>mavsdk_test.cpp</code>.</p>
+  <div class="meta">
+    <span><b>10</b> modules · 19 source files · ≈1.9k lines C++17</span>
+    <span><b>2</b> threads of our own + MAVSDK and GStreamer threads</span>
+    <span><b>8</b> mission phases</span>
+    <span><b>47</b> config keys</span>
+  </div>
+</header>
+
+<div class="prose">
+<h2 style="margin-top:28px;border:0;padding-top:0">The system in one breath</h2>
+<p>A drone carries a camera on a tilting gimbal. On a car roof there is a printed ArUco marker, ID 23. The companion computer watches the video, and when it sees the marker for five consecutive frames it switches PX4 into Offboard mode, flies the drone over the marker using velocities it derives from the marker's position in the frame, hovers for three seconds, descends, and hands PX4 the final landing. If the marker vanishes for 1.5 s or the pilot flips a mode switch, the companion lets go and PX4 holds position.</p>
+<p>Everything in the design follows from one hard constraint of PX4 Offboard mode:</p>
+<div class="callout"><p><b>PX4 must receive a velocity setpoint every few tens of milliseconds, or it drops out of Offboard into a failsafe.</b> Vision is slow and jittery. So vision and control run on separate threads, the control thread never waits on a frame, and every setpoint it sends is smoothed so a late frame never becomes a jerk.</p></div>
+</div>
+
+<h2>Two deployments, one binary</h2>
+<div class="prose"><p>The same executable runs in the Gazebo simulation and on the real aircraft. Only <code>companion.conf</code> changes: the MAVLink connection string and the video source. The figure shows what moves between the two.</p></div>
+
+<figure class="fig">
+<div class="scroll">
+<svg viewBox="0 0 960 410" role="img" aria-label="Side by side: in simulation the laptop runs Gazebo, PX4 SITL and QGroundControl and streams video and MAVLink over UDP to the Pi. On the real aircraft the camera, Pi and Pixhawk are all on board, the video goes out over 5 GHz to the operator's laptop, and RC and 433 MHz links come up from the ground.">
+<defs>
+  <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+  <marker id="a1d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--datum)"/></marker>
+  <marker id="a1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--rf)"/></marker>
+</defs>
+<!-- LEFT: simulation -->
+<text class="eb" x="20" y="22">SIMULATION · WHAT RUNS TODAY</text>
+<rect class="grp" x="20" y="34" width="430" height="160" rx="3"/>
+<text class="s" x="30" y="50">Laptop (host)</text>
+<rect class="box" x="35" y="70" width="120" height="52" rx="3"/>
+<text class="t" x="95" y="91" text-anchor="middle">Gazebo</text>
+<text class="s" x="95" y="107" text-anchor="middle">GstCameraSystem</text>
+<rect class="box" x="175" y="70" width="120" height="52" rx="3"/>
+<text class="t" x="235" y="91" text-anchor="middle">PX4 SITL</text>
+<text class="s" x="235" y="107" text-anchor="middle">flight controller</text>
+<rect class="box" x="315" y="70" width="120" height="52" rx="3"/>
+<text class="t" x="375" y="91" text-anchor="middle">QGroundControl</text>
+<text class="s" x="375" y="107" text-anchor="middle">pilot flies here</text>
+<line class="ln" x1="315" y1="96" x2="295" y2="96" marker-start="url(#a1)" marker-end="url(#a1)"/>
+<text class="m" x="305" y="142" text-anchor="middle">MAVLink 14550</text>
+<path class="ln datum" d="M95,122 V332 H135" marker-end="url(#a1d)"/>
+<text class="m datum" x="102" y="206">H.264 / RTP</text>
+<text class="m datum" x="102" y="221">UDP 5600</text>
+<line class="ln" x1="235" y1="122" x2="235" y2="300" marker-start="url(#a1)" marker-end="url(#a1)"/>
+<text class="m" x="242" y="206">MAVLink</text>
+<text class="m" x="242" y="221">UDP 14540</text>
+<rect class="grp" x="20" y="270" width="430" height="120" rx="3"/>
+<text class="s" x="30" y="286">Raspberry Pi 5 (companion)</text>
+<rect class="box" x="135" y="300" width="200" height="64" rx="3"/>
+<text class="t" x="235" y="325" text-anchor="middle">mavsdk_test</text>
+<text class="s" x="235" y="343" text-anchor="middle">ArUco · Mission · Offboard · gimbal</text>
+
+<!-- RIGHT: real aircraft -->
+<text class="eb" x="510" y="22">REAL AIRCRAFT · WHAT THE CONFIG SWITCH TARGETS</text>
+<rect class="grp" x="510" y="34" width="430" height="242" rx="3"/>
+<text class="s" x="520" y="50">Airframe LJI X4 / X500</text>
+<rect class="box" x="512" y="70" width="110" height="52" rx="3"/>
+<text class="t" x="567" y="91" text-anchor="middle">CSI camera</text>
+<text class="s" x="567" y="107" text-anchor="middle">on pan/tilt mount</text>
+<rect class="box" x="670" y="70" width="120" height="52" rx="3"/>
+<text class="t" x="730" y="91" text-anchor="middle">Pi 5</text>
+<text class="s" x="730" y="107" text-anchor="middle">mavsdk_test</text>
+<rect class="box" x="835" y="70" width="100" height="52" rx="3"/>
+<text class="t" x="885" y="91" text-anchor="middle">ALFA 5 GHz</text>
+<text class="s" x="885" y="107" text-anchor="middle">wfb_ng TX</text>
+<rect class="box" x="512" y="180" width="110" height="52" rx="3"/>
+<text class="t" x="567" y="201" text-anchor="middle">Servos</text>
+<text class="s" x="567" y="217" text-anchor="middle">AUX1 tilt · AUX2 pan</text>
+<rect class="box" x="670" y="180" width="120" height="52" rx="3"/>
+<text class="t" x="730" y="201" text-anchor="middle">Pixhawk 4 · PX4</text>
+<text class="s" x="730" y="217" text-anchor="middle">flight controller</text>
+<line class="ln" x1="622" y1="96" x2="670" y2="96" marker-end="url(#a1)"/>
+<text class="m" x="646" y="88" text-anchor="middle">frames</text>
+<line class="ln" x1="730" y1="122" x2="730" y2="180" marker-start="url(#a1)" marker-end="url(#a1)"/>
+<text class="m" x="737" y="146">MAVLink serial</text>
+<text class="m" x="737" y="160">921600 baud</text>
+<line class="ln" x1="670" y1="206" x2="622" y2="206" marker-end="url(#a1)"/>
+<text class="m" x="646" y="226" text-anchor="middle">PWM</text>
+<line class="ln" x1="567" y1="180" x2="567" y2="122" marker-end="url(#a1)"/>
+<text class="m" x="573" y="154">tilts</text>
+<line class="ln datum" x1="790" y1="96" x2="835" y2="96" marker-end="url(#a1d)"/>
+<text class="m datum" x="812" y="88" text-anchor="middle">H.264</text>
+<path class="ln datum" d="M885,122 V330" stroke-dasharray="5 4" marker-end="url(#a1d)"/>
+<text class="m datum" x="891" y="246">video for the</text>
+<text class="m datum" x="891" y="260">operator only</text>
+<rect class="grp" x="510" y="300" width="430" height="92" rx="3"/>
+<text class="s" x="520" y="316">Ground</text>
+<rect class="box" x="525" y="330" width="130" height="52" rx="3"/>
+<text class="t" x="590" y="351" text-anchor="middle">RC transmitter</text>
+<text class="s" x="590" y="367" text-anchor="middle">mode switch · camera roller</text>
+<rect class="box" x="760" y="330" width="170" height="52" rx="3"/>
+<text class="t" x="845" y="351" text-anchor="middle">Laptop</text>
+<text class="s" x="845" y="367" text-anchor="middle">wfb RX · QGroundControl</text>
+<path class="ln rf" d="M590,330 V292 H700 V232" marker-end="url(#a1r)"/>
+<text class="m rf" x="645" y="286" text-anchor="middle">2.4 GHz RC</text>
+<path class="ln rf" d="M800,330 V292 H770 V232" marker-start="url(#a1r)" marker-end="url(#a1r)"/>
+<text class="m rf" x="806" y="286">433 MHz</text>
+</svg>
+</div>
+<figcaption><b>The arrow that flips.</b> In simulation, video is an input: Gazebo streams H.264 over UDP into the Pi, and MAVLink arrives on UDP 14540 from an extra <code>mavlink start</code> instance aimed at the Pi. On the aircraft the camera is wired to the Pi, MAVLink runs over a USB-UART at 921600 baud, and the magenta video path points the other way: it exists for the operator and is not in the control loop. PX4 itself drives the pan/tilt servos, so the gimbal code does not change.</figcaption>
+</figure>
+
+<h2>What lives where</h2>
+<div class="prose"><p>The remote split the single file into ten modules under <code>src/</code>. Each module owns one concern, and <code>main.cpp</code> is the only place they meet. Two headers, <code>config.hpp</code> and <code>common.hpp</code>, are the shared foundation that everything includes.</p></div>
+
+<figure class="fig">
+<div class="scroll">
+<svg viewBox="0 0 900 360" role="img" aria-label="Module dependency graph: main.cpp includes every module; tracker uses video; selftest uses gimbal, rc_input and console; config.hpp and common.hpp are included by all.">
+<defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<rect class="box" x="330" y="14" width="240" height="46" rx="3"/>
+<text class="t" x="450" y="34" text-anchor="middle">main.cpp</text>
+<text class="s" x="450" y="50" text-anchor="middle">wires the modules · runs the 50 Hz loop</text>
+<path class="ln" d="M450,60 V92"/>
+<path class="ln" d="M90,92 H870 V248 H735" marker-end="url(#a2)"/>
+<text class="s" x="458" y="85">includes every module</text>
+<path class="ln" d="M90,92 V120" marker-end="url(#a2)"/>
+<path class="ln" d="M240,92 V120" marker-end="url(#a2)"/>
+<path class="ln" d="M390,92 V120" marker-end="url(#a2)"/>
+<path class="ln" d="M540,92 V120" marker-end="url(#a2)"/>
+<path class="ln" d="M690,92 V120" marker-end="url(#a2)"/>
+<path class="ln" d="M840,92 V120" marker-end="url(#a2)"/>
+
+<rect class="box" x="30" y="120" width="120" height="56" rx="3"/>
+<text class="t" x="90" y="142" text-anchor="middle">tracker</text>
+<text class="m" x="90" y="160" text-anchor="middle">OpenCV aruco · thread</text>
+<rect class="box" x="180" y="120" width="120" height="56" rx="3"/>
+<text class="t" x="240" y="142" text-anchor="middle">video</text>
+<text class="m" x="240" y="160" text-anchor="middle">GStreamer string</text>
+<rect class="box" x="330" y="120" width="120" height="56" rx="3"/>
+<text class="t" x="390" y="142" text-anchor="middle">mission</text>
+<text class="m" x="390" y="160" text-anchor="middle">pure logic, no I/O</text>
+<rect class="box" x="480" y="120" width="120" height="56" rx="3"/>
+<text class="t" x="540" y="142" text-anchor="middle">gimbal</text>
+<text class="m" x="540" y="160" text-anchor="middle">MAVSDK Gimbal</text>
+<rect class="box" x="630" y="120" width="120" height="56" rx="3"/>
+<text class="t" x="690" y="142" text-anchor="middle">rc_input</text>
+<text class="m" x="690" y="160" text-anchor="middle">MAVSDK passthrough</text>
+<rect class="box" x="780" y="120" width="120" height="56" rx="3"/>
+<text class="t" x="840" y="142" text-anchor="middle">console</text>
+<text class="m" x="840" y="160" text-anchor="middle">termios · [q]</text>
+
+<line class="ln" x1="150" y1="148" x2="180" y2="148" marker-end="url(#a2)"/>
+<text class="s" x="165" y="140" text-anchor="middle">uses</text>
+
+<rect class="box" x="615" y="220" width="120" height="56" rx="3"/>
+<text class="t" x="675" y="242" text-anchor="middle">selftest</text>
+<text class="m" x="675" y="260" text-anchor="middle">bench mode</text>
+<path class="ln" d="M645,220 L545,178" marker-end="url(#a2)"/>
+<path class="ln" d="M675,220 L690,178" marker-end="url(#a2)"/>
+<path class="ln" d="M705,220 L835,178" marker-end="url(#a2)"/>
+<text class="s" x="560" y="212">drives gimbal, rc_input, console</text>
+
+<rect x="30" y="300" width="870" height="46" rx="3" fill="var(--panel-2)" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4" opacity=".9"/>
+<text class="m" x="46" y="320">config.hpp · struct Config · applyKV · loadConfig</text>
+<text class="m" x="46" y="337">common.hpp · Clock · kDeg · Phase · Measurement · Status · Shared</text>
+<text class="s" x="884" y="328" text-anchor="end">included by every module above</text>
+</svg>
+</div>
+<figcaption><b>Dependencies point down.</b> Nothing below <code>main</code> knows about the control loop, and <code>mission</code> knows nothing about MAVSDK beyond the <code>VelocityBodyYawspeed</code> struct it fills. That is what makes the state machine readable in isolation.</figcaption>
+</figure>
+
+<div class="tscroll">
+<table>
+<thead><tr><th>Module</th><th>Owns</th><th>Key types and functions</th><th>Talks to</th></tr></thead>
+<tbody>
+<tr><td><code>common</code></td><td>Vocabulary shared by both threads</td><td><code>Clock</code>, <code>kDeg</code>, <code>msSince</code>, <code>Phase</code>, <code>Measurement</code>, <code>Status</code>, <code>Shared</code></td><td>nothing</td></tr>
+<tr><td><code>config</code></td><td>Every tunable, file and CLI parsing</td><td><code>Config</code>, <code>applyKV</code> (dictionary of member pointers), <code>loadConfigFile</code>, <code>loadConfig</code></td><td>nothing</td></tr>
+<tr><td><code>video</code></td><td>The GStreamer pipeline string</td><td><code>buildPipeline</code>, <code>opencvHasGStreamer</code></td><td>config</td></tr>
+<tr><td><code>tracker</code></td><td>Vision thread, ArUco, debug window</td><td><code>DroneTracker::run / detect / showWindow</code></td><td>video, Shared</td></tr>
+<tr><td><code>gimbal</code></td><td>Camera pitch over MAVLink, slew limit, fallbacks</td><td><code>GimbalControl::init / setPitch / measured / current</code></td><td>MAVSDK Gimbal</td></tr>
+<tr><td><code>rc_input</code></td><td>RC roller → camera angle while pilot flies</td><td><code>RcInput::init / pitchDeg / rawUs</code></td><td>MAVSDK MavlinkPassthrough</td></tr>
+<tr><td><code>mission</code></td><td>State machine and controller</td><td><code>Mission::update / abort / seedVelocity / setManualPitch</code>, <code>Setpoint</code></td><td>Measurement in, Setpoint out</td></tr>
+<tr><td><code>console</code></td><td>Raw terminal, <kbd>q</kbd> to quit</td><td><code>setKeyboardRawMode</code>, <code>pollKeyboard</code></td><td>Shared</td></tr>
+<tr><td><code>selftest</code></td><td>Bench checks instead of flight</td><td><code>runSelfTest</code>, exit 0 / 2 / 1</td><td>gimbal, rc_input, console, Telemetry</td></tr>
+<tr><td><code>main</code></td><td>Connect, takeoff, the 50 Hz loop, landing hand-off</td><td><code>main()</code></td><td>everything</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Runtime: threads and the meeting point</h2>
+<div class="prose"><p>The code creates two threads of its own. Two libraries add their own threads underneath. Everything that crosses a thread boundary goes through one struct, <code>Shared</code>, or through a <code>std::atomic</code>.</p></div>
+
+<figure class="fig">
+<div class="scroll">
+<svg viewBox="0 0 1100 400" role="img" aria-label="Five columns: GStreamer threads feed frames to the vision thread; the vision thread publishes a Measurement into Shared under a mutex; the main thread copies it, runs the mission and sends setpoints through MAVSDK's threads to PX4; MAVSDK callbacks write telemetry into atomics the main thread reads.">
+<defs>
+  <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+  <marker id="a3v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--vis)"/></marker>
+</defs>
+<text class="eb" x="80" y="22" text-anchor="middle">LIBRARY THREADS</text>
+<text class="eb" x="315" y="22" text-anchor="middle">OUR THREAD 2 · VISION</text>
+<text class="eb" x="555" y="22" text-anchor="middle">MEETING POINT</text>
+<text class="eb" x="800" y="22" text-anchor="middle">OUR THREAD 1 · CONTROL</text>
+<text class="eb" x="1035" y="22" text-anchor="middle">LIBRARY THREADS</text>
+
+<rect class="box" x="10" y="150" width="140" height="70" rx="3"/>
+<text class="t" x="80" y="178" text-anchor="middle">GStreamer</text>
+<text class="s" x="80" y="196" text-anchor="middle">receive · buffer · decode</text>
+
+<rect class="box" x="230" y="60" width="170" height="250" rx="3"/>
+<text class="t" x="315" y="84" text-anchor="middle">DroneTracker::run</text>
+<text class="m" x="246" y="120">cap.read(frame)</text>
+<text class="m" x="246" y="150">detect → ang_x, ang_y</text>
+<text class="m" x="246" y="180">stamp pitch_now, seq</text>
+<text class="m" x="246" y="210">publish meas</text>
+<text class="m" x="246" y="240">showWindow (gui=1)</text>
+<text class="m" x="246" y="270">[q] → quit</text>
+
+<rect class="box" x="490" y="60" width="130" height="250" rx="3"/>
+<text class="t" x="555" y="84" text-anchor="middle">Shared</text>
+<rect x="500" y="104" width="110" height="64" rx="2" fill="none" stroke="currentColor" stroke-width=".8" opacity=".6"/>
+<text class="s" x="506" y="118">mutex mtx</text>
+<text class="m" x="514" y="138">meas</text>
+<text class="m" x="514" y="156">status</text>
+<rect x="500" y="186" width="110" height="80" rx="2" fill="none" stroke="currentColor" stroke-width=".8" opacity=".6"/>
+<text class="s" x="506" y="200">atomics</text>
+<text class="m" x="514" y="220">cam_pitch_deg</text>
+<text class="m" x="514" y="238">running</text>
+<text class="m" x="514" y="256">quit</text>
+
+<rect class="box" x="710" y="60" width="180" height="250" rx="3"/>
+<text class="t" x="800" y="84" text-anchor="middle">main() loop · 50 Hz</text>
+<text class="m" x="724" y="120">copy meas (lock)</text>
+<text class="m" x="724" y="150">mission.update(...)</text>
+<text class="m" x="724" y="180">offboard start/stream/stop</text>
+<text class="m" x="724" y="210">gimbal.setPitch(...)</text>
+<text class="m" x="724" y="240">publish status</text>
+<text class="m" x="724" y="270">sleep_until(next)</text>
+
+<rect class="box" x="980" y="60" width="110" height="250" rx="3"/>
+<text class="t" x="1035" y="84" text-anchor="middle">MAVSDK</text>
+<text class="m" x="992" y="120">rx thread</text>
+<text class="m" x="992" y="150">timer thread</text>
+<text class="m" x="992" y="190">callbacks →</text>
+<text class="m" x="992" y="208">atomics</text>
+<text class="m" x="992" y="240">resends last</text>
+<text class="m" x="992" y="258">setpoint</text>
+<rect class="box" x="980" y="350" width="110" height="40" rx="3"/>
+<text class="t" x="1035" y="375" text-anchor="middle">PX4</text>
+<line class="ln" x1="1035" y1="310" x2="1035" y2="350" marker-start="url(#a3)" marker-end="url(#a3)"/>
+<text class="m" x="1041" y="334">MAVLink</text>
+
+<line class="ln" x1="150" y1="185" x2="230" y2="185" marker-end="url(#a3)"/>
+<text class="m" x="190" y="177" text-anchor="middle">frames</text>
+<text class="s" x="190" y="196" text-anchor="middle">newest only</text>
+
+<line class="ln" x1="400" y1="130" x2="490" y2="130" marker-end="url(#a3)"/>
+<text class="m" x="445" y="122" text-anchor="middle">meas</text>
+<text class="s" x="445" y="141" text-anchor="middle">under mtx</text>
+<line class="ln" x1="490" y1="200" x2="400" y2="200" marker-end="url(#a3)"/>
+<text class="m" x="445" y="192" text-anchor="middle">status</text>
+<text class="s" x="445" y="211" text-anchor="middle">under mtx</text>
+<line class="ln" x1="490" y1="250" x2="400" y2="250" marker-end="url(#a3)"/>
+<text class="m" x="445" y="242" text-anchor="middle">cam_pitch_deg</text>
+<text class="s" x="445" y="261" text-anchor="middle">atomic</text>
+
+<line class="ln" x1="620" y1="130" x2="710" y2="130" marker-end="url(#a3)"/>
+<text class="m" x="665" y="122" text-anchor="middle">copy meas</text>
+<text class="s" x="665" y="141" text-anchor="middle">under mtx</text>
+<line class="ln" x1="710" y1="200" x2="620" y2="200" marker-end="url(#a3)"/>
+<text class="m" x="665" y="192" text-anchor="middle">status</text>
+<text class="s" x="665" y="211" text-anchor="middle">under mtx</text>
+<line class="ln" x1="710" y1="250" x2="620" y2="250" marker-end="url(#a3)"/>
+<text class="m" x="665" y="242" text-anchor="middle">cam_pitch_deg</text>
+<text class="s" x="665" y="261" text-anchor="middle">= gimbal.current()</text>
+
+<line class="ln vis" x1="890" y1="120" x2="980" y2="120" marker-end="url(#a3v)"/>
+<text class="m vis" x="935" y="112" text-anchor="middle">velocity setpoint</text>
+<text class="s" x="935" y="131" text-anchor="middle">every 20 ms</text>
+<line class="ln" x1="890" y1="160" x2="980" y2="160" marker-end="url(#a3)"/>
+<text class="m" x="935" y="152" text-anchor="middle">set_angles</text>
+<text class="s" x="935" y="171" text-anchor="middle">gimbal pitch</text>
+<line class="ln" x1="980" y1="220" x2="890" y2="220" marker-end="url(#a3)"/>
+<text class="m" x="935" y="212" text-anchor="middle">telemetry</text>
+<text class="s" x="935" y="231" text-anchor="middle">alt · mode · vel · yaw</text>
+<line class="ln" x1="980" y1="270" x2="890" y2="270" marker-end="url(#a3)"/>
+<text class="m" x="935" y="262" text-anchor="middle">RC_CHANNELS</text>
+<text class="s" x="935" y="281" text-anchor="middle">gimbal attitude</text>
+</svg>
+</div>
+<figcaption><b>Nothing waits on anything.</b> The vision thread blocks only on the decoder. The control thread blocks only on its own 20 ms timer. The two touch through a mutex held for a single struct copy, and an atomic for the camera angle. MAVSDK callbacks run on MAVSDK's threads and write only to atomics, which is why <code>rel_alt</code>, <code>flight_mode</code>, <code>meas_pitch_</code> and <code>raw_us_</code> are all <code>std::atomic</code>. The green arrow is the one that must never stop.</figcaption>
+</figure>
+
+<div class="tscroll">
+<table>
+<thead><tr><th>Thread</th><th>Created by</th><th>Blocks on</th><th>Writes</th><th>Reads</th></tr></thead>
+<tbody>
+<tr><td>Main (control)</td><td>OS, runs <code>main()</code></td><td><code>sleep_until</code>, 20 ms period</td><td><code>Shared::status</code>, <code>cam_pitch_deg</code>, MAVSDK commands</td><td><code>Shared::meas</code>, telemetry atomics, <code>rc.pitchDeg()</code></td></tr>
+<tr><td>Vision</td><td><code>std::thread</code> in <code>main.cpp</code>, runs <code>DroneTracker::run</code></td><td><code>cap_.read()</code></td><td><code>Shared::meas</code>, <code>quit</code></td><td><code>Shared::status</code>, <code>cam_pitch_deg</code></td></tr>
+<tr><td>MAVSDK rx + timer</td><td><code>Mavsdk</code> constructor</td><td>UDP / serial socket</td><td>telemetry atomics, <code>meas_pitch_</code>, <code>raw_us_</code></td><td>last setpoint, to resend</td></tr>
+<tr><td>GStreamer</td><td><code>cv::VideoCapture</code> opening the pipeline</td><td>UDP socket / decoder</td><td>the one-frame <code>appsink</code> buffer</td><td>network</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>One tick of the control loop</h2>
+<div class="prose"><p>Every 20 ms the main thread runs the same eight steps. The sequence is the order in <code>main.cpp</code>, and the order matters: the pilot's velocity is seeded and the roller angle is read before the mission decides, so a takeover starts from the drone's current motion and the camera angle the pilot chose.</p></div>
+
+<figure class="fig">
+<div class="scroll">
+<svg viewBox="0 0 1000 175" role="img" aria-label="Eight steps of one control tick, from copying the measurement to publishing status, with a return arrow labelled sleep until next.">
+<defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<g>
+<text class="m" x="69" y="30" text-anchor="middle">1</text><rect class="box" x="17" y="40" width="105" height="64" rx="3"/><text class="t" x="69" y="66" text-anchor="middle">copy meas</text><text class="s" x="69" y="84" text-anchor="middle">under mtx</text>
+<text class="m" x="192" y="30" text-anchor="middle">2</text><rect class="box" x="140" y="40" width="105" height="64" rx="3"/><text class="t" x="192" y="66" text-anchor="middle">link alive?</text><text class="s" x="192" y="84" text-anchor="middle">else leave loop</text>
+<text class="m" x="315" y="30" text-anchor="middle">3</text><rect class="box" x="263" y="40" width="105" height="64" rx="3"/><text class="t" x="315" y="66" text-anchor="middle">seedVelocity</text><text class="s" x="315" y="84" text-anchor="middle">NED → body frame</text>
+<text class="m" x="438" y="30" text-anchor="middle">4</text><rect class="box" x="386" y="40" width="105" height="64" rx="3"/><text class="t" x="438" y="66" text-anchor="middle">setManualPitch</text><text class="s" x="438" y="84" text-anchor="middle">rc.pitchDeg()</text>
+<text class="m" x="561" y="30" text-anchor="middle">5</text><rect class="box" x="509" y="40" width="105" height="64" rx="3"/><text class="t" x="561" y="66" text-anchor="middle">mission.update</text><text class="s" x="561" y="84" text-anchor="middle">→ Setpoint</text>
+<text class="m" x="684" y="30" text-anchor="middle">6</text><rect class="box fill-vis" x="632" y="40" width="105" height="64" rx="3"/><text class="t" x="684" y="66" text-anchor="middle">Offboard</text><text class="s" x="684" y="84" text-anchor="middle">start · stream · stop · land</text>
+<text class="m" x="807" y="30" text-anchor="middle">7</text><rect class="box" x="755" y="40" width="105" height="64" rx="3"/><text class="t" x="807" y="66" text-anchor="middle">gimbal.setPitch</text><text class="s" x="807" y="84" text-anchor="middle">slew-limited</text>
+<text class="m" x="930" y="30" text-anchor="middle">8</text><rect class="box" x="878" y="40" width="105" height="64" rx="3"/><text class="t" x="930" y="66" text-anchor="middle">publish status</text><text class="s" x="930" y="84" text-anchor="middle">poll [q]</text>
+</g>
+<line class="ln" x1="122" y1="72" x2="140" y2="72" marker-end="url(#a4)"/>
+<line class="ln" x1="245" y1="72" x2="263" y2="72" marker-end="url(#a4)"/>
+<line class="ln" x1="368" y1="72" x2="386" y2="72" marker-end="url(#a4)"/>
+<line class="ln" x1="491" y1="72" x2="509" y2="72" marker-end="url(#a4)"/>
+<line class="ln" x1="614" y1="72" x2="632" y2="72" marker-end="url(#a4)"/>
+<line class="ln" x1="737" y1="72" x2="755" y2="72" marker-end="url(#a4)"/>
+<line class="ln" x1="860" y1="72" x2="878" y2="72" marker-end="url(#a4)"/>
+<path class="ln" d="M930,104 V146 H69 V104" marker-end="url(#a4)"/>
+<text class="m" x="500" y="140" text-anchor="middle">sleep_until(next); next += 20 ms · fixed rate, no drift · if more than 1 s late, resync instead of catching up</text>
+</svg>
+</div>
+<figcaption><b>Step 6 is the only place the drone is touched.</b> It has four cases. The mission wants control and we lack it: send one setpoint, then <code>offboard.start()</code>. We have control: if telemetry says the mode is no longer Offboard after a 1.5 s grace, the pilot intervened, so <code>abort()</code>. If the mission says land: <code>offboard.stop()</code>, then <code>action.land()</code>. Otherwise stream this tick's velocity. The mission released control: <code>offboard.stop()</code>, PX4 goes to Hold.</figcaption>
+</figure>
+
+<h2>The mission state machine</h2>
+<div class="prose"><p><code>Mission::update</code> is pure logic. It takes the latest <code>Measurement</code>, the relative altitude and the time, and returns a <code>Setpoint</code>. Colour shows who is flying the aircraft in each phase.</p></div>
+
+<figure class="fig">
+<div class="scroll">
+<svg viewBox="0 0 900 300" role="img" aria-label="State machine: Preflight to Takeoff to Patrol to Approach to Hover to Descend to Land to Landed, with returns to Patrol from Approach, Hover and Descend when the marker is lost or the pilot changes mode. Patrol is pilot-controlled, Approach, Hover and Descend are companion-controlled via Offboard, Takeoff and Land are flown by PX4.">
+<defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<!-- row 1 -->
+<rect class="box" x="30" y="50" width="120" height="48" rx="3"/><text class="t" x="90" y="79" text-anchor="middle">PREFLIGHT</text>
+<rect class="box fill-mech" x="210" y="50" width="120" height="48" rx="3"/><text class="t" x="270" y="79" text-anchor="middle">TAKEOFF</text>
+<rect class="box fill-sig" x="390" y="50" width="120" height="48" rx="3"/><text class="t" x="450" y="79" text-anchor="middle">PATROL</text>
+<rect class="box fill-vis" x="570" y="50" width="120" height="48" rx="3"/><text class="t" x="630" y="79" text-anchor="middle">APPROACH</text>
+<rect class="box fill-vis" x="750" y="50" width="120" height="48" rx="3"/><text class="t" x="810" y="79" text-anchor="middle">HOVER</text>
+<!-- row 2 -->
+<rect class="box fill-vis" x="750" y="190" width="120" height="48" rx="3"/><text class="t" x="810" y="219" text-anchor="middle">DESCEND</text>
+<rect class="box fill-mech" x="570" y="190" width="120" height="48" rx="3"/><text class="t" x="630" y="219" text-anchor="middle">LAND</text>
+<rect class="box" x="390" y="190" width="120" height="48" rx="3"/><text class="t" x="450" y="219" text-anchor="middle">LANDED</text>
+<!-- forward edges -->
+<line class="ln" x1="150" y1="68" x2="210" y2="68" marker-end="url(#a5)"/>
+<text class="s" x="180" y="31" text-anchor="middle">health ok,</text><text class="s" x="180" y="43" text-anchor="middle">auto_takeoff=1</text>
+<line class="ln" x1="330" y1="68" x2="390" y2="68" marker-end="url(#a5)"/>
+<text class="s" x="360" y="43" text-anchor="middle">altitude reached</text>
+<line class="ln" x1="510" y1="68" x2="570" y2="68" marker-end="url(#a5)"/>
+<text class="s" x="540" y="31" text-anchor="middle">marker seen 5 frames,</text><text class="s" x="540" y="43" text-anchor="middle">no cooldown</text>
+<line class="ln" x1="690" y1="68" x2="750" y2="68" marker-end="url(#a5)"/>
+<text class="s" x="720" y="43" text-anchor="middle">dist &lt; 0.35 m</text>
+<line class="ln" x1="750" y1="86" x2="690" y2="86" marker-end="url(#a5)"/>
+<text class="s" x="720" y="114" text-anchor="middle">dist &gt; 0.70 m</text>
+<path class="ln" d="M835,98 V190" marker-end="url(#a5)"/>
+<text class="s" x="841" y="140">held 3 s,</text><text class="s" x="841" y="152">auto_land</text>
+<line class="ln" x1="750" y1="214" x2="690" y2="214" marker-end="url(#a5)"/>
+<text class="s" x="720" y="262" text-anchor="middle">alt ≤ marker + 1.5 m</text>
+<line class="ln" x1="570" y1="214" x2="510" y2="214" marker-end="url(#a5)"/>
+<text class="s" x="540" y="262" text-anchor="middle">in_air = false</text>
+<!-- preflight -> patrol (pilot takes off) -->
+<path class="ln" d="M90,98 V130 H440 V98" marker-end="url(#a5)"/>
+<text class="s" x="265" y="124" text-anchor="middle">auto_takeoff=0 · pilot takes off from QGC</text>
+<!-- return bus -->
+<path class="ln" d="M630,98 V150"/>
+<path class="ln" d="M790,98 V150"/>
+<path class="ln" d="M775,190 V150"/>
+<path class="ln" d="M790,150 H460 V98" marker-end="url(#a5)"/>
+<text class="s" x="625" y="166" text-anchor="middle">marker lost &gt; 1.5 s, or pilot changed mode → offboard.stop(), Hold</text>
+<!-- legend -->
+<rect class="fill-sig" x="30" y="276" width="14" height="14" rx="2" stroke-width="1"/><text class="s" x="50" y="287">pilot flies (QGC / RC)</text>
+<rect class="fill-vis" x="200" y="276" width="14" height="14" rx="2" stroke-width="1"/><text class="s" x="220" y="287">companion flies (Offboard)</text>
+<rect class="fill-mech" x="410" y="276" width="14" height="14" rx="2" stroke-width="1"/><text class="s" x="430" y="287">PX4 flies itself</text>
+</svg>
+</div>
+<figcaption><b>Hysteresis and cooldown keep it from flapping.</b> Hover is entered inside 0.35 m but only left for Approach outside 0.70 m. A pilot override sets a 15 s cooldown during which Patrol refuses to take over again even with the marker in view. Land is triggered on barometric altitude: marker height plus <code>land_alt_m</code>.</figcaption>
+</figure>
+
+<div class="tscroll">
+<table>
+<thead><tr><th>Time band</th><th class="num">Value</th><th>Meaning in <code>Mission::update</code></th></tr></thead>
+<tbody>
+<tr><td>visible</td><td class="num">≤ 250 ms since last detection</td><td>Marker is in view now. Full proportional control.</td></tr>
+<tr><td>streak window</td><td class="num">≤ 300 ms between detections</td><td>Consecutive-frame counter keeps incrementing. Five in a row triggers takeover.</td></tr>
+<tr><td>frame_timeout_ms</td><td class="num">500 ms</td><td>Measurement is stale. Velocities go to zero, Offboard is kept.</td></tr>
+<tr><td>dropout</td><td class="num">250 ms to 1500 ms</td><td>Previous velocity decays by 10 % per tick. Still controlling.</td></tr>
+<tr><td>lost_timeout_ms</td><td class="num">1500 ms</td><td>Release control, PX4 to Hold, back to Patrol.</td></tr>
+<tr><td>Offboard grace</td><td class="num">1500 ms after start</td><td>Ignore a non-Offboard flight mode while telemetry catches up.</td></tr>
+<tr><td>override_cooldown_ms</td><td class="num">15 000 ms</td><td>After the pilot intervenes, no automatic takeover.</td></tr>
+<tr><td>hover_time_ms</td><td class="num">3000 ms</td><td>Hold over the marker before descending.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>From pixels to metres</h2>
+<div class="prose"><p>One camera image cannot give distance by itself. The companion gets it from a right triangle: the drone knows its height, the gimbal knows its pitch, and the marker's pixel offset gives an angle. The tracker converts pixels to angles with a pinhole model, and the mission converts angles plus height into metres forward and to the right.</p></div>
+
+<figure class="fig">
+<div class="scroll">
+<svg viewBox="0 0 720 312" role="img" aria-label="Side view: the drone at height above a car; the horizon, the camera optical axis tilted down by the gimbal pitch, and the line of sight to the marker on the roof. Height above marker divided by tangent of the depression angle gives forward distance.">
+<defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<!-- ground and car -->
+<line class="ln" x1="20" y1="280" x2="580" y2="280"/>
+<text class="s" x="22" y="296">ground · takeoff point</text>
+<rect x="440" y="200" width="120" height="80" rx="3" fill="var(--panel-2)" stroke="currentColor" stroke-width="1"/>
+<text class="s" x="500" y="262" text-anchor="middle">red_car</text>
+<rect class="fill-ink" x="470" y="195" width="20" height="6"/>
+<text class="s" x="480" y="187" text-anchor="middle">ArUco 23</text>
+<!-- drone -->
+<rect class="fill-ink" x="106" y="56" width="28" height="7" rx="2"/>
+<circle cx="104" cy="56" r="4" fill="none" stroke="currentColor" stroke-width="1"/>
+<circle cx="136" cy="56" r="4" fill="none" stroke="currentColor" stroke-width="1"/>
+<text class="s" x="120" y="44" text-anchor="middle">drone · camera</text>
+<!-- horizon -->
+<line class="thin" x1="120" y1="60" x2="600" y2="60"/>
+<text class="s" x="604" y="64">horizon</text>
+<!-- optical axis, pitch -15 deg -->
+<line class="ln sig" x1="120" y1="60" x2="600" y2="188.6" stroke-dasharray="6 4"/>
+<text class="s sig" x="604" y="194">optical axis</text>
+<!-- line of sight to marker -->
+<line class="ln datum" x1="120" y1="60" x2="480" y2="200"/>
+<!-- angles -->
+<path class="ln sig" d="M210,60 A90,90 0 0 1 206.9,83.3" stroke-width="1"/>
+<text class="s sig" x="218" y="80">pitch (−)</text>
+<path class="ln datum" d="M264.9,98.8 A150,150 0 0 1 259.8,114.4" stroke-width="1"/>
+<text class="s datum" x="270" y="114">ang_y</text>
+<path class="ln" d="M320,60 A200,200 0 0 1 306.4,132.5" stroke-width="1"/>
+<text class="s" x="328" y="104">dep = −pitch + ang_y</text>
+<!-- h -->
+<line class="thin" x1="480" y1="60" x2="480" y2="200"/>
+<text class="t" x="488" y="128">h</text>
+<text class="s" x="488" y="142">= rel_alt − target_height_m</text>
+<!-- rel_alt and target_height -->
+<line class="thin" x1="120" y1="63" x2="120" y2="280"/>
+<text class="s" x="114" y="175" text-anchor="end">rel_alt</text>
+<line class="thin" x1="480" y1="200" x2="480" y2="280" stroke-dasharray="2 2"/>
+<text class="s" x="566" y="244">target_height_m</text>
+<!-- fwd bracket -->
+<line class="ln" x1="120" y1="222" x2="480" y2="222" marker-start="url(#a6)" marker-end="url(#a6)" stroke-width="1"/>
+<text class="s" x="300" y="238" text-anchor="middle">fwd = h / tan(dep)</text>
+<!-- frame inset -->
+<rect x="600" y="78" width="100" height="76" rx="2" fill="var(--panel-2)" stroke="currentColor" stroke-width="1"/>
+<line class="thin" x1="640" y1="116" x2="660" y2="116"/><line class="thin" x1="650" y1="106" x2="650" y2="126"/>
+<circle cx="650" cy="138" r="4" fill="var(--datum)"/>
+<text class="s" x="650" y="168" text-anchor="middle">camera frame</text>
+<text class="s" x="650" y="181" text-anchor="middle">marker ang_y below centre</text>
+<!-- formulas -->
+<text class="m" x="20" y="307" fill="var(--ink-2)">dep = −pitch + ang_y     fwd = h / tan(dep)     right = h / sin(dep) · tan(ang_x)</text>
+</svg>
+</div>
+<figcaption><b>Why the gimbal angle must be true.</b> The pitch stamped into each <code>Measurement</code> is the pitch the camera actually had when the frame was captured. If the servo lags the command and the code believes the command, <code>dep</code> is wrong and the drone flies to a point that is not the marker. That single fact is why the remote added a slew limiter and a measured-angle fallback chain, drawn next.</figcaption>
+</figure>
+
+<h2>Who points the camera</h2>
+<div class="prose"><p>The gimbal never decides anything about the mission. Its only job is to keep the marker in frame, and its only output that matters is the angle the geometry trusts. Four sources compete for the target angle, one per situation, and one chain decides what angle to believe.</p></div>
+
+<figure class="fig">
+<div class="scroll">
+<svg viewBox="0 0 1000 290" role="img" aria-label="Four sources of the camera pitch target: RC roller in Patrol, patrol_pitch_deg fallback, Mission aiming at the marker while controlling, and pitch_min after landing. They feed gimbal.setPitch with a slew limiter, then MAVLink to PX4 and the servo, then PX4 reports the measured angle; current() picks fixed pitch, measured or the command; the result is stamped on each frame and used by the mission geometry, which closes the loop.">
+<defs><marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<path class="ln" d="M60,230 V14 H530 V40" marker-end="url(#a7)"/>
+<text class="s" x="300" y="10" text-anchor="middle">loop: the next frame's geometry uses the angle the camera really has</text>
+
+<rect class="box fill-sig" x="20" y="40" width="180" height="54" rx="3"/>
+<text class="t" x="110" y="62" text-anchor="middle">RC roller</text>
+<text class="s" x="110" y="80" text-anchor="middle">RcInput.pitchDeg() · Patrol only</text>
+<rect class="box" x="230" y="40" width="180" height="54" rx="3"/>
+<text class="t" x="320" y="62" text-anchor="middle">patrol_pitch_deg −45°</text>
+<text class="s" x="320" y="80" text-anchor="middle">Patrol, no RC data</text>
+<rect class="box fill-vis" x="440" y="40" width="180" height="54" rx="3"/>
+<text class="t" x="530" y="62" text-anchor="middle">Mission aims at marker: −dep</text>
+<text class="s" x="530" y="80" text-anchor="middle">Approach · Hover · Descend</text>
+<rect class="box fill-mech" x="650" y="40" width="180" height="54" rx="3"/>
+<text class="t" x="740" y="62" text-anchor="middle">pitch_min_deg −90°</text>
+<text class="s" x="740" y="80" text-anchor="middle">after the land command</text>
+
+<path class="ln" d="M110,94 L380,140" marker-end="url(#a7)"/>
+<path class="ln" d="M320,94 L430,140" marker-end="url(#a7)"/>
+<path class="ln" d="M530,94 L480,140" marker-end="url(#a7)"/>
+<path class="ln" d="M740,94 L530,140" marker-end="url(#a7)"/>
+
+<rect class="box" x="330" y="140" width="250" height="54" rx="3"/>
+<text class="t" x="455" y="162" text-anchor="middle">gimbal.setPitch(target)</text>
+<text class="s" x="455" y="180" text-anchor="middle">slew limiter gimbal_rate_deg_s → cmd_</text>
+<line class="ln" x1="580" y1="167" x2="640" y2="167" marker-end="url(#a7)"/>
+<text class="s" x="610" y="160" text-anchor="middle">MAVLink</text>
+<rect class="box" x="640" y="140" width="150" height="54" rx="3"/>
+<text class="t" x="715" y="162" text-anchor="middle">set_angles → PX4</text>
+<text class="s" x="715" y="180" text-anchor="middle">SITL model or AUX servos</text>
+<line class="ln" x1="790" y1="167" x2="830" y2="167" marker-end="url(#a7)"/>
+<text class="s" x="810" y="160" text-anchor="middle">report</text>
+<rect class="box" x="830" y="140" width="150" height="54" rx="3"/>
+<text class="t" x="905" y="162" text-anchor="middle">measured()</text>
+<text class="s" x="905" y="180" text-anchor="middle">attitude, fresh &lt; 500 ms</text>
+
+<path class="ln" d="M905,194 V230" marker-end="url(#a7)"/>
+<path class="ln" d="M570,194 V215 H620 V230" marker-end="url(#a7)"/>
+<text class="s" x="632" y="212">cmd_ when no fresh measurement</text>
+
+<rect class="box" x="560" y="230" width="420" height="46" rx="3"/>
+<text class="m" x="770" y="258" text-anchor="middle">current() = !ok ? fixed_pitch : isfinite(measured) ? measured : cmd_</text>
+<line class="ln" x1="560" y1="253" x2="520" y2="253" marker-end="url(#a7)"/>
+<rect class="box" x="300" y="230" width="220" height="46" rx="3"/>
+<text class="t" x="410" y="250" text-anchor="middle">Shared.cam_pitch_deg</text>
+<text class="s" x="410" y="266" text-anchor="middle">stamped into each Measurement</text>
+<line class="ln" x1="300" y1="253" x2="260" y2="253" marker-end="url(#a7)"/>
+<text class="s" x="280" y="246" text-anchor="middle">per frame</text>
+<rect class="box" x="20" y="230" width="240" height="46" rx="3"/>
+<text class="t" x="140" y="250" text-anchor="middle">Mission geometry</text>
+<text class="s" x="140" y="266" text-anchor="middle">dep = −pitch + ang_y → fwd, right</text>
+</svg>
+</div>
+<figcaption><b>Three guards added for real servos.</b> A <b>slew limiter</b>: with <code>gimbal_rate_deg_s</code> set, <code>cmd_</code> moves at most that fast, so it never runs ahead of a servo that has no feedback. A <b>fixed-pitch fallback</b>: with no gimbal at all, <code>current()</code> reports the configured patrol angle instead of pretending a command moved the camera. A <b>bench mode</b> that measures the real servo speed and tells you the number to put in the config.</figcaption>
+</figure>
+
+<h2>Configuration precedence</h2>
+<div class="prose">
+<p>Four layers, each overriding the one before it:</p>
+<pre><code>defaults in struct Config   →   companion.conf next to the binary   →   --config=FILE   →   --key=value on the CLI</code></pre>
+<p>The remote replaced the long if-else chain in <code>applyKV</code> with a lookup table from key name to a <em>pointer to member</em> of <code>Config</code>, wrapped in a <code>std::variant</code> over the five field types. <code>std::visit</code> then dispatches on the actual type and calls <code>stoi</code>, <code>stof</code>, <code>stol</code>, <code>parseBool</code> or a plain string copy. Adding a parameter is now one field in the struct and one line in the table. Two old key names, <code>stable_time_ms</code> and <code>pitch_init_deg</code>, are kept as aliases.</p>
+</div>
+
+<h2>Bench mode instead of flight</h2>
+<div class="prose"><p><code>--selftest=gimbal|rc|all</code> makes <code>main()</code> connect, initialise the gimbal and RC input, then call <code>runSelfTest</code> and exit. Nothing arms and Offboard is never started. <code>run_companion.sh</code> notices the flag and skips the network and video checks, because on the bench there is no laptop to ping.</p></div>
+<div class="grid2">
+  <div class="card"><span class="eyebrow">selftest=gimbal</span><h3>Does the camera do what the code believes?</h3><p>Checks that PX4 reports a gimbal angle at all. Drives the camera to <code>pitch_max</code> then <code>pitch_min</code>, timing each travel. Flags a reversed axis, a range the servo cannot reach, and a <code>gimbal_gain</code> that would command faster than the measured speed. Prints the <code>gimbal_rate_deg_s</code> to write into the config. Without feedback it runs the camera back and forth and asks you for a stopwatch.</p></div>
+  <div class="card"><span class="eyebrow">selftest=rc</span><h3>Is it the right channel, and where are its stops?</h3><p>For 20 s it mirrors the roller onto the camera and records the minimum and maximum pulse width seen. Flags a channel that never moves or travels less than 300 µs, and prints the <code>rc_pitch_min_us</code> and <code>rc_pitch_max_us</code> values to use. Tells you whether to set <code>rc_pitch_reversed</code>.</p></div>
+  <div class="card"><span class="eyebrow">exit codes</span><h3>0 · 2 · 1</h3><p>Zero means everything agreed. Two means the test ran and printed a numbered list of things to fix. One means it could not start, for example because the vehicle is armed, which it refuses outright.</p></div>
+</div>
+
+<h2>The failsafe layer above the mission</h2>
+<div class="prose">
+<p>PX4 runs its own failsafes in parallel and they outrank the mission. The companion sees them only as a flight-mode change in telemetry and must accept them. The one that matters most for this architecture is what PX4 does when the companion stops sending setpoints.</p>
+<ul>
+<li><b>Companion dies or hangs.</b> No setpoint for <code>COM_OF_LOSS_T</code> and PX4 takes the Offboard-loss action, which must be Hold or Return and never Manual. The docs call this the single most important parameter and ask for a live test: kill the process in the air and watch PX4 recover.</li>
+<li><b>Pilot moves the mode switch.</b> PX4 leaves Offboard. The companion sees <code>flight_mode != Offboard</code>, calls <code>abort()</code>, and stays out for 15 s.</li>
+<li><b>RC or ground-station link lost, low battery, GPS lost, geofence.</b> PX4's own Return, Land or Hold actions take over. The companion does not read battery state, which the audit lists as a finding.</li>
+<li><b>Video link to the operator lost.</b> No effect on control on the real aircraft, because detection runs on the Pi before encoding. In simulation this is the opposite: the video is the input, and losing it zeroes the velocities within 500 ms.</li>
+</ul>
+</div>
+
+<h2>What changed from the single file</h2>
+<div class="tscroll">
+<table>
+<thead><tr><th>Was, in <code>mavsdk_test.cpp</code></th><th>Now</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>Header comment, includes</td><td><code>src/main.cpp</code> top</td><td>Same text, module list added.</td></tr>
+<tr><td><code>kDeg</code>, <code>msSince</code>, <code>Phase</code>, <code>Measurement</code>, <code>Status</code>, <code>Shared</code></td><td><code>src/common.hpp/.cpp</code></td><td>Moved. <code>inline</code> so the header can be included everywhere.</td></tr>
+<tr><td><code>Config</code>, <code>applyKV</code>, <code>loadConfigFile</code>, <code>printUsage</code>, argv loop</td><td><code>src/config.hpp/.cpp</code></td><td>If-else chain became a member-pointer table. argv loop became <code>loadConfig</code>. Nine new keys.</td></tr>
+<tr><td><code>buildPipeline</code>, <code>opencvHasGStreamer</code></td><td><code>src/video.hpp/.cpp</code></td><td>Moved unchanged.</td></tr>
+<tr><td><code>DroneTracker</code></td><td><code>src/tracker.hpp/.cpp</code></td><td>Moved unchanged. <code>ARUCO_NEW_API</code> switch lives in the header.</td></tr>
+<tr><td><code>GimbalControl</code></td><td><code>src/gimbal.hpp/.cpp</code></td><td><b>New:</b> <code>fixed_pitch_</code> fallback, <code>rate_limit_</code> slew limiter, <code>current()</code> honours <code>ok_</code>.</td></tr>
+<tr><td>none</td><td><code>src/rc_input.hpp/.cpp</code></td><td><b>New class.</b> Subscribes to <code>RC_CHANNELS</code> via MavlinkPassthrough, maps µs to degrees.</td></tr>
+<tr><td><code>Setpoint</code>, <code>Mission</code></td><td><code>src/mission.hpp/.cpp</code></td><td><b>New:</b> <code>setManualPitch</code>; in Patrol the camera follows the roller with <code>rc_pitch_gain</code>.</td></tr>
+<tr><td>termios helpers</td><td><code>src/console.hpp/.cpp</code></td><td>Moved unchanged.</td></tr>
+<tr><td>none</td><td><code>src/selftest.hpp/.cpp</code></td><td><b>New.</b> 278 lines of bench checks.</td></tr>
+<tr><td><code>main()</code></td><td><code>src/main.cpp</code></td><td>Adds <code>RcInput</code>, <code>patrolPitch()</code> lambda, the selftest branch, and lets video fail to open in bench mode.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Where the docs and the code disagree</h2>
+<div class="callout note"><p><b>Local <code>CLAUDE.md</code> is stale.</b> It describes a flat repo with one source file. After pulling, the layout caveat and the single-file architecture section need rewriting.</p></div>
+<div class="callout note"><p><b><code>docs/diagrams.md</code> draws the target video path, not the implemented one.</b> Its data-flow diagram shows <code>libcamerasrc</code>, a <code>tee</code> before the encoder, and the Y plane of NV12 fed straight to the detector. <code>src/video.cpp</code> still opens a local camera with <code>v4l2src</code> as MJPEG 720p and converts to BGR, then the tracker converts back to grey. The audit's findings 6 to 9 acknowledge this and the README lists the <code>libcamerasrc</code> branch as one of three things to do before the first autonomous flight.</p></div>
+<div class="callout note"><p><b><code>.DS_Store</code> files were committed</b> at the repo root and in <code>docs/</code>. The new <code>.gitignore</code> adds them, but the two already tracked need <code>git rm --cached</code>.</p></div>
+
+<h2>Documentation map</h2>
+<div class="grid2">
+  <div class="card"><h3>README.md</h3><p>Software side and simulator workflow. Now also the servo gimbal setup, bench mode, RC camera control, and the list of three pre-flight tasks.</p></div>
+  <div class="card"><h3>docs/hardware.md</h3><p>Deck layout, centre of gravity, frequency plan, cooling, camera ribbon routing, full wiring table, wire gauges and fuses, PX4 parameters to set.</p></div>
+  <div class="card"><h3>docs/diagrams.md</h3><p>Five Mermaid diagrams: power, signals, data flow, mission state machine, PX4 failsafe layer.</p></div>
+  <div class="card"><h3>docs/audit.md</h3><p>Power budget and flight time, failure-by-failure analysis, 13 findings on code and hardware with cost of fixing, video and MAVLink tuning.</p></div>
+  <div class="card"><h3>docs/assembly.md</h3><p>Step-by-step build, PX4 setup in QGC, Pi 5 install, RTL8812AU driver and wfb_ng, pre-flight checklists.</p></div>
+  <div class="card"><h3>docs/3d/model.html</h3><p>Self-contained three.js model of the airframe. Removing assemblies or sliding the battery recalculates balance, thrust-to-weight and flight time.</p></div>
+</div>
+
+<p class="small" style="margin-top:40px">Source of truth: <code>origin/main</code> at <code>fd1d3e4</code>, read without pulling. Line counts and key counts come from the files themselves.</p>
+</div>
+
+</body>
+</html>
